@@ -1,0 +1,1233 @@
+---
+title: "Latent Profiles Analysis of Implicit Beliefs"
+author: "Lisi Wang & Veronica Yan"
+date: "03/04/2021"
+output: pdf_document
+---
+
+```{r set up}
+library(car)
+library(dplyr)
+library(ggpubr)
+library(lavaan)
+library(mclust)
+library(nFactors)
+library(PerformanceAnalytics)
+library(psych)
+library(stats)
+library(sjPlot)
+library(tidyLPA)
+library(tidyverse)
+getwd()
+#setwd("/Users/LisiWang/Documents/Project_SRLSurveys")
+
+# ------ data cleaning and de-identification ------
+#SRL_Fall17 <- read.csv("SRLSurvey_Fall17_Nums_1&2RowsRemoved_05262020.csv") # removed 1st and 2nd rows so it doesn't mess up all the data types
+#head(SRL_Fall17)
+#str(SRL_Fall17)
+# download "SRL Survey - Fall 17" from Qualtrics, from "Download all fields" with "Use numeric values"
+# recoding done in Qualtrics on 05262020
+    # Q1.1 - consent
+    # Q1.2 - signature (1 - I consent, 0 - I do not consent)
+    # Q2.1 - name
+    # Q3.1 - interesting
+    # Q3.2 - interesting_timing
+    # Q4.1 - uninteresting
+    # Q4.2 - uninteresting_timing
+    # Q5.1 - courseName
+    # Q5.2 - courseDescription
+    # Q5.3 - courseField (1 - STEM, 2 - Social Science, 3 - Humanities and Arts, 4 - Other)
+    # Q5.3_4_TEXT
+    # Q5.4_1 - courseInterest (1 to 100)
+    # Q5.5 - courseInterest_qual
+    # Q5.6 - courseCollege
+    # Q5.7 - coursePriorCourses
+    # Q5.8 - majorName
+    # Q5.9 - majorField (1 - STEM, 2 - Social Science, 3 - Humanities and Arts, 4 - Other)
+    # Q5.9_4_TEXT
+    # Q5.10 - courseRequired (1 - Y, 0 - N)
+    # Q5.11_1 - courseImportance (1 to 100)
+    # Q5.12 - yearinCollege (1 - Freshman, 2 - Sophomore, 3 - Junior, 4 - Senior, 5 - Other)
+    # Q5.12_5_TEXT
+    # Q6.1 - LSInstructions
+    # Q6.2 - timeofDayPercent (1 - Morning, 2 - Afternoon, 3 - Evening, 4 - Late night)
+    # Q6.3 - timeofDayEffective (1 - Morning, 2 - Afternoon, 3 - Evening, 4 - Late night, 5 - Other)
+    # Q7.1 - LSScaleInstructions
+    # Q7.2 - LS (1 - 6)
+    # Q7.3 - LS_test (1 - 6)
+    # Q7.2 - LS_when (1 - 6)
+    # Q8.1 - motivInstructions
+    # Q9.1 - MSLQ1 (1 - 6)
+    # Q10.1 - MSLQ2 (1 - 6)
+    # Q11.1 - MSLQ3 (1 - 6)
+    # Q12.1 - MSLQ4 (1 - 6)
+    # Q13.1 - MSLQ5 (1 - 6)
+    # Q14.1 - goal (1 - 6)
+    # Q15.1 - beliefInstructions
+    # Q16.1 - diffImport (1 - 6)
+    # Q17.1 - diffImposs (1 - 6)
+    # Q18.1 - easePoss (1 - 6)
+    # Q19.1 - easeTriv (1 - 6)
+    # Q20.1 - grit (1 - 6)
+    # Q21.1 - growth (1 - 6)
+    # Q22.1 - NFC1 (1 - 6)
+    # Q23.1 - NFC2 (1 - 6)
+    # Q24.1 - NFC3 (1 - 6)
+    # Q25.1 - fromPerson 
+        # (1 - Teacher, 2 - Tutor, 3 - Parent, 4 - Sibling, 5 - Other family member, 6 - Friend, 7 - On my own)
+    # Q25.2 - fromPreviousCourse (1 - EDP304/EDP310, 2 - ALD320, 3 - Other)
+    # Q25.2_3_TEXT
+    # Q25.3 - fromCurrentCourse (1 - EDP304/EDP310, 2 - ALD320, 3 - Other)
+    # Q25.3_3_TEXT
+    # Q26.1 - fb
+    # Q27.1 - demoInstructions
+    # Q27.2 - age
+    # Q27.3 - sex (1 - Male, 0 - Female)
+    # Q27.4 - race 
+        # (1 - American Indian or Alaska Native, 2 - Asian, 3 - Native Hawaiian or Other Pacific Islander, 
+        # 4 - Black or African American, 5 - Hispanic or Latino, 6 - White, 7 - More than one race, 8 - Other)
+    # Q27.4_8_TEXT
+    # Q27.5 - EFL (1 - Y, 0 - N)
+    # Q27.6 - yearsinUS
+    # Q27.7 - momEd 
+        # (1 - Less than high school, 2 - High school graduate, 3 - Some college, 4 - 2 year degree, 
+        # 5 - 4 year degree, 6 - Master's degree, 7 - Doctorate or professional degree)
+    # Q28.1 debrief
+# select those who finished and consented
+#SRL_Fall17 <- subset(SRL_Fall17, Finished == 1 & signature == 1)
+#SRL_Fall17$Finished
+#SRL_Fall17$signature
+# remove duplicated names, this methods removes the second entry
+#SRL_Fall17 <- SRL_Fall17[!duplicated(SRL_Fall17$name), ]
+#SRL_Fall17$name # 458 pps had unique & valid responses
+# create a new variable that identifies condition (1 = interesting, 0 = uninteresting)
+#SRL_Fall17 <- SRL_Fall17 %>%
+    #mutate(condition = ifelse(is.na(interesting_timing_Page.Submit) == FALSE, 1, 0))
+#SRL_Fall17$condition
+# create a new variable that identifies individuals
+#SRL_Fall17 <- tibble::rowid_to_column(SRL_Fall17, "id") # row id as column
+#SRL_Fall17$id
+# remove 2nd to 28th columns, including names
+#names(SRL_Fall17)
+#SRL_Fall17 <- SRL_Fall17[-c(2:28)]
+#names(SRL_Fall17)
+#write.csv(SRL_Fall17, "SRLSurvey_Fall17_Nums_1&2RowsRemoved_deidentified_05262020.csv", row.names = FALSE)
+SRL_Fall17 <- read.csv("SRLSurvey_Fall17_Nums_1&2RowsRemoved_deidentified_05262020.csv")
+head(SRL_Fall17)
+str(SRL_Fall17)
+```
+
+
+```{r more data cleaning}
+# remove those who failed attention check
+#table(SRL_Fall17$ATTNCHECK)
+SRL_Fall17 <- subset(SRL_Fall17, ATTNCHECK == 2)
+SRL_Fall17$ATTNCHECK # 366 pps passed attention check
+```
+
+
+```{r demographics}
+# sex age race major year in college
+names(SRL_Fall17)
+# sex (cat)
+SRL_Fall17$sex
+table(SRL_Fall17$sex) # 242 female, 124 male
+# age (num)
+SRL_Fall17$age
+range(SRL_Fall17$age) # 18-41
+mean(SRL_Fall17$age) # 20.49
+# race (cat; other: race_8_TEXT)
+SRL_Fall17$race
+table(SRL_Fall17$race)
+prop.table(table(SRL_Fall17$race))
+# majorField (cat; other: majorField_4_TEXT)
+SRL_Fall17$majorField
+table(SRL_Fall17$majorField)
+prop.table(table(SRL_Fall17$majorField))
+# yearinCollege (cat; other: yearinCollege_5_TEXT)
+SRL_Fall17$yearinCollege
+table(SRL_Fall17$yearinCollege)
+prop.table(table(SRL_Fall17$yearinCollege))
+SRL_Fall17$yearinCollege_5_TEXT
+```
+
+
+```{r descriptives and correlations (goals and implicit beliefs)}
+# ------ create new goals and implicit beliefs variables ------
+SRL_Fall17 <- SRL_Fall17 %>%
+    dplyr::mutate(growth = ((7-growth7_R) + growth4 + growth1 + (7-growth8_R) +
+                                growth3 + (7-growth5_R) + (7-growth6_R) + growth2)/8,
+                  diffImport = (diffImport1 + diffImport2 + diffImport3 + diffImport4)/4,
+                  diffImposs = (diffImposs1 + diffImposs2 + diffImposs3 + diffImposs4)/4,
+                  easePoss = (easePoss1 + easePoss2 + easePoss3 + easePoss4)/4,
+                  easeTriv = (easeTriv1 + easeTriv2 + easeTriv3 + easeTriv4)/4,
+                  mApproach = (mApproach1 + mApproach2 + mApproach3)/3,
+                  mAvoid = (mAvoid1 + mAvoid2 + mAvoid3)/3,
+                  pApproach = (pApproach1 + pApproach2 + pApproach3)/3,
+                  pAvoid = (pAvoid1 + pAvoid2 + pAvoid3)/3)
+
+# ------ goals and implicit beliefs mean and sd ------
+mb_m <- SRL_Fall17 %>%
+    dplyr::summarize_at(c("diffImport", "diffImposs", "easeTriv", "easePoss", "growth",  
+                          "mApproach", "mAvoid", "pApproach", "pAvoid"),
+                 mean) %>% 
+    tidyr::gather(mb, M, c("diffImport", "diffImposs", "easeTriv", "easePoss" , "growth",  
+                           "mApproach", "mAvoid", "pApproach", "pAvoid"))
+mb_m
+mb_sd <- SRL_Fall17 %>%
+    dplyr::summarize_at(c("diffImport", "diffImposs", "easeTriv", "easePoss", "growth",  
+                          "mApproach", "mAvoid", "pApproach", "pAvoid"),
+                 sd) %>%
+    tidyr::gather(mb, SD, c("diffImport", "diffImposs", "easeTriv", "easePoss", "growth",  
+                            "mApproach", "mAvoid", "pApproach", "pAvoid"))
+mb_sd
+mb_descriptive <- dplyr::full_join(mb_m, mb_sd, by = "mb")
+mb_descriptive
+
+# ------ goals and implicit beliefs cronbach's alpha ------
+# http://personality-project.org/r/html/alpha.html
+# https://www.researchgate.net/post/Which-is-more-important-to-report-in-articles-Cronbachs-Alpha-Based-on-Standardized-Items-or-cronbach-alpha
+names(SRL_Fall17)
+# diffImport 88:91
+alpha_diffImport <- psych::alpha(SRL_Fall17[, c(88:91)])
+alpha_diffImport # 0.91
+# diffImposs 92:95
+alpha_diffImposs <- psych::alpha(SRL_Fall17[, c(92:95)])
+alpha_diffImposs # 0.92
+# easeTriv 100:103
+alpha_easeTriv <- psych::alpha(SRL_Fall17[, c(100:103)])
+alpha_easeTriv # 0.90
+# easePoss 96:99
+alpha_easePoss <- psych::alpha(SRL_Fall17[, c(96:99)])
+alpha_easePoss # 0.93
+# growth 112:119 keys = c("growth7_R", "growth8_R", "growth5_R", "growth6_R")
+alpha_growth <- psych::alpha(SRL_Fall17[, c(112:119)], 
+                             keys = c("growth7_R", "growth8_R", "growth5_R", "growth6_R"))
+alpha_growth # 0.85
+# mApproach 86, 79, 87
+names(SRL_Fall17[, c(86, 79, 87)])
+alpha_mApproach <- psych::alpha(SRL_Fall17[, c(86, 79, 87)])
+alpha_mApproach # 0.87
+# mAvoid 86, 79, 87
+names(SRL_Fall17[, c(84, 82, 78)])
+alpha_mAvoid <- psych::alpha(SRL_Fall17[, c(84, 82, 78)])
+alpha_mAvoid # 0.75
+# pApproach 83, 76, 80
+names(SRL_Fall17[, c(83, 76, 80)])
+alpha_pApproach <- psych::alpha(SRL_Fall17[, c(83, 76, 80)])
+alpha_pApproach # 0.87
+# pAvoid 85, 81, 77
+names(SRL_Fall17[, c(85, 81, 77)])
+alpha_pAvoid <- psych::alpha(SRL_Fall17[, c(85, 81, 77)])
+alpha_pAvoid # 0.86
+
+# ------ values (interest and importance) mean and sd ------
+sum(is.na(SRL_Fall17$courseImportance_1)) # 20 NAs in importance
+v_m <- SRL_Fall17 %>%
+    dplyr::summarize_at(c("courseInterest_1", "courseImportance_1"),
+                 mean, na.rm = TRUE) %>% 
+    tidyr::gather(v, M, c("courseInterest_1", "courseImportance_1"))
+v_m
+v_sd <- SRL_Fall17 %>%
+    dplyr::summarize_at(c("courseInterest_1", "courseImportance_1"),
+                 sd, na.rm = TRUE) %>% 
+    tidyr::gather(v, SD, c("courseInterest_1", "courseImportance_1"))
+v_sd
+v_descriptive <- dplyr::full_join(v_m, v_sd, by = "v")
+v_descriptive
+
+# ------ goals, implicit beliefs, and values correlations AKA Table 1 ------
+names(SRL_Fall17)
+names(SRL_Fall17[, c(154, 155, 157, 156, 153, 158, 159, 160, 161, 6, 14)])
+mb_corr <- SRL_Fall17[, c(154, 155, 157, 156, 153, 158, 159, 160, 161, 6, 14)]
+chart.Correlation(mb_corr, histogram=TRUE, pch=19) # function from PerformanceAnalytics
+```
+
+
+```{r descriptives and correlations (study strategies)}
+# ------ study strategies descriptives AKA Table 4 ------
+names(SRL_Fall17)
+ss_m <- SRL_Fall17 %>%
+    dplyr::summarize_at(c("reread", "highlight","summarize", "elaborate", "selfexplain", "vary", "test",
+                          "check", "practice", "selftest", "pretest", "create"), mean) %>% 
+    tidyr::gather(ss, M, c("reread", "highlight","summarize", "elaborate", "selfexplain", "vary", "test",
+                          "check", "practice", "selftest", "pretest", "create"))
+ss_m
+ss_sd <- SRL_Fall17 %>%
+    dplyr::summarize_at(c("reread", "highlight","summarize", "elaborate", "selfexplain", "vary", "test",
+                          "check", "practice", "selftest", "pretest", "create"), sd) %>%
+    tidyr::gather(ss, SD, c("reread", "highlight","summarize", "elaborate", "selfexplain", "vary", "test",
+                          "check", "practice", "selftest", "pretest", "create"))
+ss_sd
+ss_descriptive <- dplyr::full_join(ss_m, ss_sd, by = "ss")
+ss_descriptive 
+
+# ------ study strategies correlations ------
+names(SRL_Fall17)
+names(SRL_Fall17[, c(24, 22, 23, 25, 26, 28, 27, 30, 31, 32, 29, 33)])
+ss_corr <- SRL_Fall17[, c(24, 22, 23, 25, 26, 28, 27, 30, 31, 32, 29, 33)]
+chart.Correlation(ss_corr, histogram=TRUE, pch=19) # function from PerformanceAnalytics
+
+# ------ study strategies EFA AKA Table 5 ------
+EFA_SS <- fa.parallel(SRL_Fall17[c(24, 22, 23, 25, 26, 28, 27, 30, 31, 32, 29, 33)], 
+                      fm = "minres", fa = "fa") # nparallel: 4 factors
+nScree(SRL_Fall17[, c(24, 22, 23, 25, 26, 28, 27, 30, 31, 32, 29, 33)], 
+                  model="factors") # noc: 1, naf: 1, nparallel: 1, nkaiser: 3
+plot(nScree(SRL_Fall17[, c(24, 22, 23, 25, 26, 28, 27, 30, 31, 32, 29, 33)], 
+            model="factors"))
+# 4 factors
+EFA4_SS = fa(SRL_Fall17[, c(24, 22, 23, 25, 26, 28, 27, 30, 31, 32, 29, 33)], 
+             4, rotate = "oblimin", fm = "minres")
+EFA4_SS
+print(EFA4_SS$loadings, cutoff = 0.3)
+
+# ------ create new study strategy factors variables ------
+SRL_Fall17 <- SRL_Fall17 %>%
+    dplyr::mutate(passive = (reread + highlight + summarize)/3,
+                  elaborative = (elaborate + selfexplain + vary)/3,
+                  stdTest = (test + check + practice + selftest)/4,
+                  genTest = (pretest + create)/2)
+
+# ------ study strategy factors descriptives ------
+ssf_m <- SRL_Fall17 %>%
+    dplyr::summarize_at(c("passive", "elaborative", "stdTest", "genTest"),
+                 mean) %>% 
+    tidyr::gather(ssf, M, c("passive", "elaborative", "stdTest", "genTest"))
+ssf_m
+ssf_sd <- SRL_Fall17 %>%
+    dplyr::summarize_at(c("passive", "elaborative", "stdTest", "genTest"),
+                 sd) %>%
+    tidyr::gather(ssf, SD, c("passive", "elaborative", "stdTest", "genTest"))
+ssf_sd
+ssf_descriptive <- dplyr::full_join(ssf_m, ssf_sd, by = "ssf")
+ssf_descriptive
+
+# ------ study strategy factors cronbach's alpha ------
+# passive 24, 22, 23
+alpha_passive <- psych::alpha(SRL_Fall17[, c(24, 22, 23)])
+alpha_passive # 0.54
+
+# elaborative 25, 26, 28
+alpha_elaborative <- psych::alpha(SRL_Fall17[, c(25, 26, 28)])
+alpha_elaborative # 0.68
+
+# standard testing 27, 30, 31, 32
+alpha_stdTest <- psych::alpha(SRL_Fall17[, c(27, 30, 31, 32)])
+alpha_stdTest # 0.83
+
+# generative testing 29, 33
+alpha_genTest <- psych::alpha(SRL_Fall17[, c(29, 33)])
+alpha_genTest # 0.60
+
+# ------ study strategy factors correlations AKA Table S2 ------
+names(SRL_Fall17)
+names(SRL_Fall17[, c(162:165)])
+ssf_corr <- SRL_Fall17[, c(162:165)]
+chart.Correlation(ssf_corr, histogram=TRUE, pch=19) # function from PerformanceAnalytics
+```
+
+
+```{r manipulation check}
+SRL_Fall17$condition <- as.factor(SRL_Fall17$condition)
+table(SRL_Fall17$condition)
+# interest
+SRL_Fall17 %>%
+    group_by(condition) %>%
+    summarise(M = mean(courseInterest_1),
+              SD = sd(courseInterest_1))
+leveneTest(courseInterest_1 ~ condition, data = SRL_Fall17) # sig
+interest_cond <- t.test(courseInterest_1 ~ condition, data = SRL_Fall17)
+interest_cond
+interest_cond$parameter
+# importance
+SRL_Fall17 %>%
+    filter(is.na(courseImportance_1) == FALSE) %>%
+    group_by(condition) %>%
+    summarise(M = mean(courseImportance_1),
+              SD = sd(courseImportance_1))
+leveneTest(courseImportance_1 ~ condition, data = SRL_Fall17) # sig
+importance_cond <- t.test(courseImportance_1 ~ condition, data = SRL_Fall17)
+importance_cond
+importance_cond$parameter
+```
+
+
+```{r LPA information criteria and classification diagnostics AKA Table S1}
+# https://cran.r-project.org/web/packages/tidyLPA/vignettes/Introduction_to_tidyLPA.html
+# "Because of differences in settings for the EM algorithm and particularly for the start values (random starts for MPlus and starting values from hierarchical clustering for mclust), differences may be expected for more complex data and models."
+# compare solutions
+    # var-covar matrix of the selected variables across profiles
+    # 1 - var=equal, covar=zero (default)
+    # 2 - var=varying, covar=zero
+    # 3 - var=equal, covar=equal
+    # 4 - var=varying, covar=equal (NA)
+    # 5 - var=equal, covar=varying (NA)
+    # 6 - var=varying, covar=varying
+
+# ------ all parameter specifications ------
+SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(1:9, 
+                               variances = c("equal", "varying", "equal", "varying"), 
+                               covariances = c("zero", "zero", "equal", "varying")) %>%
+    tidyLPA::compare_solutions()
+# BIC & AHP --> model 2 with 3 classes
+# converged models: model 1 with 1-9 classess, model 2 with 1-3 classes, model 3 with 1-9 classes, model 6 with 1-3 classes
+
+# ------ EVFC1 ------
+EVFC1 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(1, variances = "equal", covariances = "zero")
+EVFC1
+tidyLPA::get_fit(EVFC1)
+EVFC1$model_1_class_1$model$df
+
+# ------ EVFC2 ------
+EVFC2 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(2, variances = "equal", covariances = "zero")
+EVFC2
+tidyLPA::get_fit(EVFC2)
+EVFC2$model_1_class_2$model$df
+EVFC2_data <- tidyLPA::get_data(EVFC2)
+str(EVFC2_data)
+EVFC2_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVFC2_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+table(EVFC2_data$Class)
+
+# ------ EVFC3 ------
+EVFC3 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(3, variances = "equal", covariances = "zero")
+EVFC3
+tidyLPA::get_fit(EVFC3)
+EVFC3$model_1_class_3$model$df
+EVFC3_data <- tidyLPA::get_data(EVFC3)
+str(EVFC3_data)
+EVFC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVFC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVFC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+table(EVFC3_data$Class)
+
+# ------ EVFC4 ------
+EVFC4 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(4, variances = "equal", covariances = "zero")
+EVFC4
+tidyLPA::get_fit(EVFC4)
+EVFC4$model_1_class_4$model$df
+EVFC4_data <- tidyLPA::get_data(EVFC4)
+str(EVFC4_data)
+EVFC4_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVFC4_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVFC4_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVFC4_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+table(EVFC4_data$Class)
+
+# ------ EVFC5 ------
+EVFC5 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(5, variances = "equal", covariances = "zero")
+EVFC5
+tidyLPA::get_fit(EVFC5)
+EVFC5$model_1_class_5$model$df
+EVFC5_data <- tidyLPA::get_data(EVFC5)
+str(EVFC5_data)
+EVFC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVFC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVFC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVFC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVFC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+table(EVFC5_data$Class)
+
+# ------ EVFC6 ------
+EVFC6 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(6, variances = "equal", covariances = "zero")
+EVFC6
+tidyLPA::get_fit(EVFC6)
+EVFC6$model_1_class_6$model$df
+EVFC6_data <- tidyLPA::get_data(EVFC6)
+str(EVFC6_data)
+EVFC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVFC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVFC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVFC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVFC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+EVFC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB6))
+table(EVFC6_data$Class)
+
+# ------ EVFC7 ------
+EVFC7 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(7, variances = "equal", covariances = "zero")
+EVFC7
+tidyLPA::get_fit(EVFC7)
+EVFC7$model_1_class_7$model$df
+EVFC7_data <- tidyLPA::get_data(EVFC7)
+str(EVFC7_data)
+EVFC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVFC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVFC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVFC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVFC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+EVFC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB6))
+EVFC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB7))
+table(EVFC7_data$Class)
+
+# ------ EVFC8 ------
+EVFC8 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(8, variances = "equal", covariances = "zero")
+EVFC8
+tidyLPA::get_fit(EVFC8)
+EVFC8$model_1_class_8$model$df
+EVFC8_data <- tidyLPA::get_data(EVFC8)
+str(EVFC8_data)
+EVFC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVFC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVFC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVFC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVFC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+EVFC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB6))
+EVFC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB7))
+EVFC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB8))
+table(EVFC8_data$Class)
+
+# ------ EVFC9 ------
+EVFC9 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(9, variances = "equal", covariances = "zero")
+EVFC9
+tidyLPA::get_fit(EVFC9)
+EVFC9$model_1_class_9$model$df
+EVFC9_data <- tidyLPA::get_data(EVFC9)
+str(EVFC9_data)
+EVFC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVFC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVFC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVFC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVFC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+EVFC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB6))
+EVFC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB7))
+EVFC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB8))
+EVFC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB9))
+table(EVFC9_data$Class)
+
+EVFC_df <- vector()
+for (k in 1:9) {
+    EVFC_df[k] = k-1 + 5*k + 5 #5*k means, 5 variances
+}
+EVFC_df
+
+# ------ VVFC1 ------
+VVFC1 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(1, variances = "varying", covariances = "zero")
+VVFC1
+tidyLPA::get_fit(VVFC1)
+VVFC1$model_2_class_1$model$df
+
+# ------ VVFC2 ------
+VVFC2 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(2, variances = "varying", covariances = "zero")
+VVFC2
+tidyLPA::get_fit(VVFC2)
+VVFC2$model_2_class_2$model$df
+VVFC2_data <- tidyLPA::get_data(VVFC2)
+str(VVFC2_data)
+VVFC2_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+VVFC2_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+table(VVFC2_data$Class)
+
+# ------ VVFC3 AKA Table 2 ------
+VVFC3 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(3, variances = "varying", covariances = "zero")
+VVFC3
+tidyLPA::get_fit(VVFC3)
+VVFC3$model_2_class_3$model$df
+VVFC3_data <- tidyLPA::get_data(VVFC3)
+str(VVFC3_data)
+VVFC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+VVFC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+VVFC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+table(VVFC3_data$Class)
+
+VVFC_df <- vector()
+for (k in 1:3) {
+    VVFC_df[k] = k-1 + 5*k + 5*k #5*k means, 5*k variances
+}
+VVFC_df
+
+# ------ EVEC1 ------
+EVEC1 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(1, variances = "equal", covariances = "equal")
+EVEC1
+tidyLPA::get_fit(EVEC1)
+EVEC1$model_3_class_1$model$df
+
+# ------ EVEC2 ------
+EVEC2 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(2, variances = "equal", covariances = "equal")
+EVEC2
+tidyLPA::get_fit(EVEC2)
+EVEC2$model_3_class_2$model$df
+EVEC2_data <- tidyLPA::get_data(EVEC2)
+str(EVEC2_data)
+EVEC2_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVEC2_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+table(EVEC2_data$Class)
+
+# ------ EVEC3 ------
+EVEC3 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(3, variances = "equal", covariances = "equal")
+EVEC3
+tidyLPA::get_fit(EVEC3)
+EVEC3$model_3_class_3$model$df
+EVEC3_data <- tidyLPA::get_data(EVEC3)
+str(EVEC3_data)
+EVEC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVEC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVEC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+table(EVEC3_data$Class)
+
+# ------ EVEC4 ------
+EVEC4 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(4, variances = "equal", covariances = "equal")
+EVEC4
+tidyLPA::get_fit(EVEC4)
+EVEC4$model_3_class_4$model$df
+EVEC4_data <- tidyLPA::get_data(EVEC4)
+str(EVEC4_data)
+EVEC4_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVEC4_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVEC4_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVEC4_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+table(EVEC4_data$Class)
+
+# ------ EVEC5 ------
+EVEC5 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(5, variances = "equal", covariances = "equal")
+EVEC5
+tidyLPA::get_fit(EVEC5)
+EVEC5$model_3_class_5$model$df
+EVEC5_data <- tidyLPA::get_data(EVEC5)
+str(EVEC5_data)
+EVEC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVEC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVEC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVEC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVEC5_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+table(EVEC5_data$Class)
+
+# ------ EVEC6 ------
+EVEC6 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(6, variances = "equal", covariances = "equal")
+EVEC6
+tidyLPA::get_fit(EVEC6)
+EVEC6$model_3_class_6$model$df
+EVEC6_data <- tidyLPA::get_data(EVEC6)
+str(EVEC6_data)
+EVEC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVEC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVEC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVEC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVEC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+EVEC6_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB6))
+table(EVEC6_data$Class)
+
+# ------ EVEC7 ------
+EVEC7 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(7, variances = "equal", covariances = "equal")
+EVEC7
+tidyLPA::get_fit(EVEC7)
+EVEC7$model_3_class_7$model$df
+EVEC7_data <- tidyLPA::get_data(EVEC7)
+str(EVEC7_data)
+EVEC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVEC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVEC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVEC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVEC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+EVEC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB6))
+EVEC7_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB7))
+table(EVEC7_data$Class)
+
+# ------ EVEC8 ------
+EVEC8 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(8, variances = "equal", covariances = "equal")
+EVEC8
+tidyLPA::get_fit(EVEC8)
+EVEC8$model_3_class_8$model$df
+EVEC8_data <- tidyLPA::get_data(EVEC8)
+str(EVEC8_data)
+EVEC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVEC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVEC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVEC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVEC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+EVEC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB6))
+EVEC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB7))
+EVEC8_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB8))
+table(EVEC8_data$Class)
+
+# ------ EVEC9 ------
+EVEC9 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(9, variances = "equal", covariances = "equal")
+EVEC9
+tidyLPA::get_fit(EVEC9)
+EVEC9$model_3_class_9$model$df
+EVEC9_data <- tidyLPA::get_data(EVEC9)
+str(EVEC9_data)
+EVEC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+EVEC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+EVEC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+EVEC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB4))
+EVEC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB5))
+EVEC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB6))
+EVEC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB7))
+EVEC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB8))
+EVEC9_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB9))
+table(EVEC9_data$Class)
+
+EVEC_df <- vector()
+for (k in 1:9) {
+    EVEC_df[k] = k-1 + 5*k + 5 + 10 #5*k means, 5 variances, 10 covariances
+}
+EVEC_df
+
+# ------ VVVC1 ------
+VVVC1 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(1, variances = "varying", covariances = "varying")
+VVVC1
+tidyLPA::get_fit(VVVC1)
+VVVC1$model_6_class_1$model$df
+
+# ------ VVVC2 ------
+VVVC2 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(2, variances = "varying", covariances = "varying")
+VVVC2
+tidyLPA::get_fit(VVVC2)
+VVVC2$model_6_class_2$model$df
+VVVC2_data <- tidyLPA::get_data(VVVC2)
+str(VVVC2_data)
+VVVC2_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+VVVC2_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+table(VVVC2_data$Class)
+
+# ------ VVVC3 ------
+VVVC3 <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth) %>%
+    tidyLPA::estimate_profiles(3, variances = "varying", covariances = "varying")
+VVVC3
+tidyLPA::get_fit(VVVC3)
+VVVC3$model_6_class_3$model$df
+VVVC3_data <- tidyLPA::get_data(VVVC3)
+str(VVVC3_data)
+VVVC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB1))
+VVVC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB2))
+VVVC3_data %>%
+    group_by(Class) %>%
+    summarise(M = mean(CPROB3))
+table(VVVC3_data$Class)
+
+VVVC_df <- vector()
+for (k in 1:3) {
+    VVVC_df[k] = k-1 + 5*k + 5*k + 10*k #5*k means, 5*k variances, 10*k covariances
+}
+VVVC_df
+```
+
+
+```{r LPA mclust replication of VVFC3}
+# https://willhipson.netlify.app/post/latent-profile/latent-profile/
+names(SRL_Fall17)
+LPA_mclust <- SRL_Fall17 %>%
+    dplyr::select(diffImport, diffImposs, easePoss, easeTriv, growth)
+names(LPA_mclust)
+head(LPA_mclust)
+BIC_mclust <- mclustBIC(LPA_mclust)
+plot(BIC_mclust)
+summary(BIC_mclust) # VVVFC is the 3VVFC model, has the same BIC as the tidyLPA 3VVFC model
+threeVVFC_mclust <- Mclust(LPA_mclust, modelNames = "VVI", G = 3, x = BIC_mclust)
+summary(threeVVFC_mclust) # same num of pps per profile, same LL, no error message
+```
+
+
+```{r LPA VVFC3 likelihood-based tests and interpretability}
+# ------ chi-squared difference ------
+# same number of parameters, nested models
+tidyLPA::get_fit(EVFC3) # LL = -2325.906
+tidyLPA::get_fit(VVFC3) # LL = -2264.206	
+tidyLPA::get_fit(VVVC3) # LL = -2225.955
+# https://stats.stackexchange.com/questions/250819/r-calculate-p-value-given-chi-squared-and-degrees-of-freedom/288089
+# model 2/VVFC3 vs. model 1/EVFC3 (10 more param)
+2*(-2264.206-(-2325.906))
+pchisq(2*(-2264.206-(-2325.906)), df=10, lower.tail=FALSE) # VVFC3 sig improves model fit from EVFC3
+# model 6/VVVC3 vs. model 2/VVFC3 (30 more param)
+2*(-2225.955-(-2264.206))
+pchisq(2*(-2225.955-(-2264.206)), df=30, lower.tail=FALSE) # VV3 sig improves model fit from VVFC3
+
+# ------ adjusted LMR ------
+# same parameter specification, k vs. k-1 profiles
+# https://stackoverflow.com/questions/31188377/polca-latent-class-how-to-do-the-adjusted-lo-mendell-rubin-lmr-test-with-r
+tidyLPA::get_fit(VVFC2) # LL = -2309.844
+tidyLPA::get_fit(VVFC3) # LL = -2264.206
+tidyLPA::calc_lrt(n=366, 
+                  null_ll=-2309.844, null_param=21, null_classes=2, 
+                  alt_ll=-2264.206, alt_param=32, alt_classes=3) # p (LMR) < 0.001
+
+# ------ means ------
+tidyLPA::plot_profiles(VVFC3)
+#ggsave("VVFC3_profiles.jpeg", width = 6, height = 4, dpi = 600)
+# 1 = Neutral
+# 2 = Unproductive or Motivation-undermining
+# 3 = Productive or Motivation-increasing
+
+# ------ create new PP and profile variables ------
+str(VVFC3_data)
+# PP_Neutral <- CPROB1
+# PP_Unproductive <- CPROB2
+# PP_Productive <- CPROB3
+# Profile <- Class: Neutral <- 1, Unproductive <- 2, Productive <- 3
+VVFC3_data <- VVFC3_data %>%
+    mutate(PP_Neutral = CPROB1,
+           PP_Unproductive = CPROB2,
+           PP_Productive = CPROB3,
+           profile = ifelse(Class == 3, "productive", 
+                            ifelse(Class == 2, "unproductive", "neutral")))
+VVFC3_data$profile
+table(VVFC3_data$profile)
+VVFC3_data$profile <- factor(VVFC3_data$profile, ordered = FALSE,
+                           levels = c("unproductive", "neutral", "productive")) # - order + relevel
+table(VVFC3_data$profile)
+
+# ------ means by new profile ------
+names(VVFC3_data)
+VVFC3_data %>%
+    group_by(profile) %>%
+    summarise(M = mean(diffImport),
+              SD = sd(diffImport))
+diffImport_aov <- aov(diffImport ~ profile, data = VVFC3_data)
+summary(diffImport_aov)
+TukeyHSD(diffImport_aov) # all ps < 0.05
+
+VVFC3_data %>%
+    group_by(profile) %>%
+    summarise(M = mean(diffImposs),
+              SD = sd(diffImposs))
+diffImposs_aov <- aov(diffImposs ~ profile, data = VVFC3_data)
+summary(diffImposs_aov)
+TukeyHSD(diffImposs_aov) # all ps < 0.05
+
+VVFC3_data %>%
+    group_by(profile) %>%
+    summarise(M = mean(easeTriv),
+              SD = sd(easeTriv))
+easeTriv_aov <- aov(easeTriv ~ profile, data = VVFC3_data)
+summary(easeTriv_aov)
+TukeyHSD(easeTriv_aov) # unproductive = neutral, both > productive
+
+VVFC3_data %>%
+    group_by(profile) %>%
+    summarise(M = mean(easePoss),
+              SD = sd(easePoss))
+easePoss_aov <- aov(easePoss ~ profile, data = VVFC3_data)
+summary(easePoss_aov)
+TukeyHSD(easePoss_aov) # unproductive = neutral, both < productive
+
+VVFC3_data %>%
+    group_by(profile) %>%
+    summarise(M = mean(growth),
+              SD = sd(growth))
+growth_aov <- aov(growth ~ profile, data = VVFC3_data)
+summary(growth_aov)
+TukeyHSD(growth_aov)
+
+# ------ variance-covariance matrices ------
+VVFC3_data_1 <- subset(VVFC3_data, Class == 1, select=c(diffImport, diffImposs, easeTriv, easePoss, growth))
+str(VVFC3_data_1)
+cov(VVFC3_data_1)
+cor(VVFC3_data_1) # largest value was 0.16
+VVFC3_data_2 <- subset(VVFC3_data, Class == 2, select=c(diffImport, diffImposs, easeTriv, easePoss, growth))
+str(VVFC3_data_2)
+cov(VVFC3_data_2)
+cor(VVFC3_data_2) # largest value was 0.34
+VVFC3_data_3 <- subset(VVFC3_data, Class == 3, select=c(diffImport, diffImposs, easeTriv, easePoss, growth))
+str(VVFC3_data_3)
+cov(VVFC3_data_3)
+cor(VVFC3_data_3) # largest value was 0.20
+```
+
+
+```{r goals as outcomes}
+# ------ combine dataframes ------
+SRL_Fall17_VVFC3 <- dplyr::bind_cols(SRL_Fall17, VVFC3_data)
+names(SRL_Fall17_VVFC3)
+# we know there are 20 NAs in courseImportance_1
+
+# ------ scale variables ------
+SRL_Fall17_VVFC3_lm <- SRL_Fall17_VVFC3 %>%
+    filter(is.na(courseImportance_1) == FALSE) %>%
+    mutate(scale_interest = scale(courseInterest_1) %>% as.vector,
+           scale_importance = scale(courseImportance_1) %>% as.vector, 
+           scale_mApproach = scale(mApproach) %>% as.vector,
+           scale_mAvoid = scale(mAvoid) %>% as.vector,
+           scale_pApproach = scale(pApproach) %>% as.vector,
+           scale_pAvoid = scale(pAvoid) %>% as.vector)
+#SRL_Fall17_VVFC3$scale_interest
+#SRL_Fall17_VVFC3$scale_importance
+#SRL_Fall17_VVFC3$scale_mApproach
+
+# ------ mApproach ~ profiles*goals AKA Table 3 ------
+# mApproach not centered, interest and importance centered (n = 346)
+mApproach_mod1 <- lm(mApproach ~ profile, data = SRL_Fall17_VVFC3_lm)
+summary(mApproach_mod1)
+mApproach_mod2 <- lm(mApproach ~ profile*scale_interest + profile*scale_importance, data = SRL_Fall17_VVFC3_lm)
+summary(mApproach_mod2)
+anova(mApproach_mod1, mApproach_mod2)
+
+# ------ mAvoid ~ profiles*goals AKA Table 3 ------
+# mAvoid not centered, interest and importance centered (n = 346)
+mAvoid_mod1 <- lm(mAvoid ~ profile, data = SRL_Fall17_VVFC3_lm)
+summary(mAvoid_mod1)
+mAvoid_mod2 <- lm(mAvoid ~ profile*scale_interest + profile*scale_importance, data = SRL_Fall17_VVFC3_lm)
+summary(mAvoid_mod2)
+anova(mAvoid_mod1, mAvoid_mod2)
+
+# ------ pApproach ~ profiles*goals AKA Table 3 ------
+# pApproach not centered, interest and importance centered (n = 346)
+pApproach_mod1 <- lm(pApproach ~ profile, data = SRL_Fall17_VVFC3_lm)
+summary(pApproach_mod1)
+pApproach_mod2 <- lm(pApproach ~ profile*scale_interest + profile*scale_importance, data = SRL_Fall17_VVFC3_lm)
+summary(pApproach_mod2)
+anova(pApproach_mod1, pApproach_mod2)
+pApproach_int <- lm(pApproach ~ scale_interest*profile + scale_importance*profile, data = SRL_Fall17_VVFC3_lm)
+plot_model(pApproach_int, type = "int", title = "", axis.title = "Performance Approach")
+
+# ------ pAvoid ~ profiles*goals AKA Table 3 ------
+# pAvoid not centered, interest and importance centered (n = 346)
+pAvoid_mod1 <- lm(pAvoid ~ profile, data = SRL_Fall17_VVFC3_lm)
+summary(pAvoid_mod1)
+pAvoid_mod2 <- lm(pAvoid ~ profile*scale_interest + profile*scale_importance, data = SRL_Fall17_VVFC3_lm)
+summary(pAvoid_mod2)
+anova(pAvoid_mod1, pAvoid_mod2)
+pAvoid_int <- lm(pAvoid ~ scale_interest*profile + scale_importance*profile, data = SRL_Fall17_VVFC3_lm)
+plot_model(pAvoid_int, type = "int", title = "", axis.title = "Performance Avoidance")
+```
+
+
+```{r study strategy factors as outcomes}
+# ------ study strategies by profile AKA Table 4 ------
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(reread),
+              SD = sd(reread))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(highlight),
+              SD = sd(highlight))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(summarize),
+              SD = sd(summarize))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(elaborate),
+              SD = sd(elaborate))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(selfexplain),
+              SD = sd(selfexplain))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(vary),
+              SD = sd(vary))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(test),
+              SD = sd(test))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(check),
+              SD = sd(check))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(practice),
+              SD = sd(practice))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(selftest),
+              SD = sd(selftest))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(pretest),
+              SD = sd(pretest))
+SRL_Fall17_VVFC3 %>%
+    group_by(profile) %>%
+    summarise(M = mean(create),
+              SD = sd(create))
+
+# ------ passive ~ profiles*goals AKA Table 6 ------
+# passive not centered, interest and importance centered (n = 346)
+passive_mod1 <- lm(passive ~ profile, data = SRL_Fall17_VVFC3_lm)
+summary(passive_mod1)
+passive_mod2 <- lm(passive ~ profile*scale_interest + profile*scale_importance, data = SRL_Fall17_VVFC3_lm)
+summary(passive_mod2)
+anova(passive_mod1, passive_mod2)
+
+# ------ elaborative ~ profiles*goals AKA Table 6 ------
+# elaborative not centered, interest and importance centered (n = 346)
+elaborative_mod1 <- lm(elaborative ~ profile, data = SRL_Fall17_VVFC3_lm)
+summary(elaborative_mod1)
+elaborative_mod2 <- lm(elaborative ~ profile*scale_interest + profile*scale_importance, data = SRL_Fall17_VVFC3_lm)
+summary(elaborative_mod2)
+anova(elaborative_mod1, elaborative_mod2)
+
+# ------ standard testing ~ profiles*goals Table S3 ------
+# standard testing not centered, interest and importance centered (n = 346)
+stdTest_mod1 <- lm(stdTest ~ profile, data = SRL_Fall17_VVFC3_lm)
+summary(stdTest_mod1)
+stdTest_mod2 <- lm(stdTest ~ profile*scale_interest + profile*scale_importance, data = SRL_Fall17_VVFC3_lm)
+summary(stdTest_mod2)
+anova(stdTest_mod1, stdTest_mod2)
+
+# ------ generative testing ~ profiles*goals AKA Table S3 ------
+# generative testing not centered, interest and importance centered (n = 346)
+genTest_mod1 <- lm(genTest ~ profile, data = SRL_Fall17_VVFC3_lm)
+summary(genTest_mod1)
+genTest_mod2 <- lm(genTest ~ profile*scale_interest + profile*scale_importance, data = SRL_Fall17_VVFC3_lm)
+summary(genTest_mod2)
+anova(genTest_mod1, genTest_mod2)
+
+# ------ passive ~ profiles + values + goals AKA Table 7 ------
+# passive and goals not centered, interest and importance centered (n = 346)
+passive_all <- lm (passive ~ profile + scale_interest + scale_importance + 
+                       mApproach + mAvoid + pApproach + pAvoid, data = SRL_Fall17_VVFC3_lm)
+summary(passive_all)
+
+# ------ elaborative ~ profiles + values + goals AKA Table 7 ------
+# elaborative and goals not centered, interest and importance centered (n = 346)
+elaborative_all <- lm (elaborative ~ profile + scale_interest + scale_importance + 
+                       mApproach + mAvoid + pApproach + pAvoid, data = SRL_Fall17_VVFC3_lm)
+summary(elaborative_all)
+
+# ------ standard testing ~ profiles + values + goals AKA Table 7 ------
+# stdTest and goals not centered, interest and importance centered (n = 346)
+stdTest_all <- lm (stdTest ~ profile + scale_interest + scale_importance + 
+                       mApproach + mAvoid + pApproach + pAvoid, data = SRL_Fall17_VVFC3_lm)
+summary(stdTest_all)
+
+# ------ generative testing ~ profiles + values + goals AKA Table 7 ------
+# genTest and goals not centered, interest and importance centered (n = 346)
+genTest_all <- lm (genTest ~ profile + scale_interest + scale_importance + 
+                       mApproach + mAvoid + pApproach + pAvoid, data = SRL_Fall17_VVFC3_lm)
+summary(genTest_all)
+```
